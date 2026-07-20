@@ -1,0 +1,44 @@
+name: Test-Telegram-Notification
+
+on:
+  workflow_dispatch:  # 手动触发测试
+
+jobs:
+  test-tg:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📬 测试 Telegram 通知
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+            echo "❌ 未配置 TELEGRAM_BOT_TOKEN Secrets！"
+            exit 1
+          fi
+          if [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "❌ 未配置 TELEGRAM_CHAT_ID Secrets！"
+            exit 1
+          fi
+          
+          NOW=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
+          MESSAGE="🧪 *Telegram 通知测试成功！*%0A%0A📅 时间: ${NOW}%0A🖥️ 仓库: ${REPO}"
+          
+          echo "正在向 Chat ID ${TELEGRAM_CHAT_ID} 发送测试消息..."
+          
+          RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${MESSAGE}" \
+            -d parse_mode="Markdown" \
+            -d disable_web_page_preview="true")
+          
+          echo "Telegram API 响应内容: ${RESPONSE}"
+          
+          if echo "$RESPONSE" | grep -q '"ok":true'; then
+            echo "✅ 消息发送成功！请查看 Telegram。"
+          else
+            echo "❌ 消息发送失败，请根据上方 API 响应排查问题。"
+            exit 1
+          fi
