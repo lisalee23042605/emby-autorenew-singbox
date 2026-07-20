@@ -26,7 +26,7 @@ jobs:
 
       - name: ⏳ 随机延迟 (避免固定时间被检测)
         run: |
-          DELAY=$((RANDOM % 3600))
+          DELAY=$((60 + RANDOM % 61))
           DELAY_MIN=$((DELAY / 60))
           DELAY_SEC=$((DELAY % 60))
           echo "⏳ 随机等待 ${DELAY_MIN}分${DELAY_SEC}秒..."
