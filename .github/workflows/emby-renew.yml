@@ -40,6 +40,7 @@ jobs:
           bash <(wget -qO- https://main.ssss.nyc.mn/setup_proxy.sh)
 
       - name: 🚀 运行 Emby 保号
+        id: emby_run
         env:
           EMBY_ACCOUNTS: ${{ secrets.EMBY_ACCOUNTS }}
           IS_PROXY: ${{ env.IS_PROXY }}
@@ -48,6 +49,28 @@ jobs:
           https_proxy: ${{ env.IS_PROXY == 'true' && 'http://127.0.0.1:1081' || '' }}
         run: |
           python3 emby_keeper.py
+
+      - name: 📬 Telegram 通知 (成功)
+        if: ${{ success() && secrets.TELEGRAM_BOT_TOKEN != '' }}
+        run: |
+          NOW=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
+          MESSAGE="✅ *Emby 保号成功*%0A%0A📅 时间: ${NOW}%0A🖥️ 运行: [查看详情](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="${MESSAGE}" \
+            -d parse_mode="Markdown" \
+            -d disable_web_page_preview="true"
+
+      - name: 📬 Telegram 通知 (失败)
+        if: ${{ failure() && secrets.TELEGRAM_BOT_TOKEN != '' }}
+        run: |
+          NOW=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
+          MESSAGE="❌ *Emby 保号失败*%0A%0A📅 时间: ${NOW}%0A🖥️ 运行: [查看详情](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})%0A%0A请检查日志排查问题。"
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="${MESSAGE}" \
+            -d parse_mode="Markdown" \
+            -d disable_web_page_preview="true"
 
       - name: 🧹 清理旧的工作流运行记录
         if: always()
