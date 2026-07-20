@@ -1,0 +1,65 @@
+name: Emby-Auto-Renew
+on:
+  workflow_dispatch:  # 支持手动触发
+  schedule:
+    - cron: '0 3 * * *'  # UTC 3:00 = 北京时间 11:00
+
+jobs:
+  emby-renew:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🐍 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 安装 Python 依赖
+        run: |
+          pip install requests pysocks
+
+      - name: ⏳ 随机延迟 (避免固定时间被检测)
+        run: |
+          DELAY=$((RANDOM % 3600))
+          DELAY_MIN=$((DELAY / 60))
+          DELAY_SEC=$((DELAY % 60))
+          echo "⏳ 随机等待 ${DELAY_MIN}分${DELAY_SEC}秒..."
+          sleep $DELAY
+
+      - name: 🌐 设置 sing-box 代理转发
+        continue-on-error: true
+        env:
+          NODE_LINK: ${{ secrets.NODE_LINK }}
+        run: |
+          bash <(wget -qO- https://main.ssss.nyc.mn/setup_proxy.sh)
+
+      - name: 🚀 运行 Emby 保号
+        env:
+          EMBY_ACCOUNTS: ${{ secrets.EMBY_ACCOUNTS }}
+          IS_PROXY: ${{ env.IS_PROXY }}
+          PROXY_SERVER: ${{ env.PROXY_SERVER }}
+          http_proxy: ${{ env.IS_PROXY == 'true' && 'http://127.0.0.1:1081' || '' }}
+          https_proxy: ${{ env.IS_PROXY == 'true' && 'http://127.0.0.1:1081' || '' }}
+        run: |
+          python3 emby_keeper.py
+
+      - name: 🧹 清理旧的工作流运行记录
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          runs=$(gh run list --workflow="${{ github.workflow }}" --limit=100 --json databaseId --jq '.[].databaseId')
+          count=0
+          for run_id in $runs; do
+            count=$((count + 1))
+            if [ $count -gt 1 ]; then
+              echo "删除运行记录: $run_id"
+              gh run delete $run_id || true
+            fi
+          done
