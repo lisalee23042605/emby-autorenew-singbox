@@ -171,6 +171,15 @@ def keep_alive_account(account: Dict[str, Any], index: int) -> bool:
     session = requests.Session()
     session.headers.update(headers)
 
+    # Check for Proxy
+    if os.environ.get("IS_PROXY") == "true" and os.environ.get("PROXY_SERVER"):
+        proxy_url = os.environ.get("PROXY_SERVER")
+        session.proxies = {
+            "http": proxy_url,
+            "https": proxy_url
+        }
+        print(f"[Proxy] Using proxy for this request: {proxy_url}")
+
     # 1. Authenticate by Username / Password
     auth_url = f"{base_url}/emby/Users/AuthenticateByName"
     auth_data = {
@@ -221,8 +230,11 @@ def keep_alive_account(account: Dict[str, Any], index: int) -> bool:
         if ping_res.status_code in [200, 204]:
             print(f"[Keep-Alive] Session capabilities reported successfully.")
 
-        # Small sleep to simulate realistic session duration
-        time.sleep(2)
+        # Simulate watching media for 1 to 2 minutes
+        watch_duration = random.randint(60, 120)
+        print(f"[Keep-Alive] Simulating watching media for {watch_duration} seconds...")
+        time.sleep(watch_duration)
+        
         print(f"[Done] Account [{name}] keep-alive completed successfully!")
         return True
 
