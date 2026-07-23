@@ -3,7 +3,8 @@
 本工具为 Emby 账号自动保号/签到解决方案，现已全面升级：
 1. **真实固定设备名**：使用真实 iOS 设备标识（默认 `Lisa's iPhone` / `Lisa's iPad`），避免随机设备名导致的封号风险。
 2. **零重复定时调度**：彻底删除了 GitHub Actions 的每日定时任务，改为完全由 Cloudflare Worker 独立触发，解决一天跑两次的重复问题。
-3. **Cloudflare Worker 账号管理后台**：内置暗黑风可视化 Web 控制台，支持随时添加、删除、编辑、禁用 Emby 账号，保号数据实时存入 Cloudflare KV 数据库。后续增删账号**无需再次修改 GitHub Secrets**！
+3. **Cloudflare Worker 账号管理后台**：内置暗黑风可视化 Web 控制台（带密码保护），支持随时添加、删除、编辑、禁用 Emby 账号，保号数据实时存入 Cloudflare KV 数据库。后续增删账号**无需再次修改 GitHub Secrets**！
+4. **Telegram 通知**：每次保号完成后自动通过 TG Bot 推送结果，清楚告知哪些账号成功、哪些失败。
 
 ---
 
@@ -11,9 +12,10 @@
 
 ```text
 .
-├── main.py                     # Python 自动保号脚本 (支持批量账号及固定设备名)
+├── main.py                     # Python 自动保号脚本 (支持批量账号 + 固定设备名 + TG 通知)
 ├── .github/workflows/renew.yml # GitHub Actions 工作流 (仅保留 repository_dispatch)
-├── worker.js                   # Cloudflare Worker 单文件源码 (包含 GUI 后台 + API + Cron)
+├── worker.js                   # Cloudflare Worker 单文件源码 (包含 GUI 后台 + API + Cron + 密码保护)
+├── .gitignore                  # Git 忽略规则
 └── README.md                   # 部署使用指南
 ```
 
@@ -21,8 +23,12 @@
 
 ## 🛠️ 第一步：更新 GitHub 仓库文件
 
-1. 将本仓库中的 `main.py` 和 `.github/workflows/renew.yml` 覆盖更新到你的 GitHub 仓库 `lisalee23042605/emby-autorenew-singbox` 中。
-2. 提交通告 (Commit & Push)。
+1. 将本仓库中的 `main.py`、`.github/workflows/renew.yml`、`.gitignore` 覆盖更新到你的 GitHub 仓库 `lisalee23042605/emby-autorenew-singbox` 中。
+2. 确保 GitHub 仓库 **Settings** → **Secrets and variables** → **Actions** 中保留以下两个 Secrets：
+   - `TELEGRAM_BOT_TOKEN`：你的 TG Bot Token（通过 @BotFather 创建）
+   - `TELEGRAM_CHAT_ID`：你的 TG 用户 ID 或群组 ID
+3. 其他旧的 Emby 相关 Secrets（`EMBY_URL`、`EMBY_USERNAME`、`EMBY_PASSWORD`、`EMBY_ACCOUNTS_JSON`）可以**全部删除**。
+4. 提交推送 (Commit & Push)。
 
 ---
 
@@ -40,7 +46,11 @@
 4. 找到 **KV Namespace Bindings** 区域，点击 **Add binding**：
    - **Variable name**: `EMBY_KV` (必须完全一致)
    - **KV namespace**: 选择刚刚创建的 `EMBY_ACCOUNTS_KV`
-5. 点击 **Save and deploy**。
+5. 找到 **Environment Variables** 区域，点击 **Add variable**：
+   - **Variable name**: `ADMIN_PASSWORD`
+   - **Value**: 设置你的管理后台登录密码（例如 `MySecretPass123`）
+   - ⚠️ 建议勾选 **Encrypt** 加密存储
+6. 点击 **Save and deploy**。
 
 ### 3. 配置定时触发器 (Cron Triggers)
 1. 在 Worker 设置页面中，点击 **Triggers** -> **Cron Triggers** -> **Add Cron Trigger**。
@@ -59,16 +69,17 @@
 
 ### 2. 登录 Web 管理后台配置
 1. 在浏览器打开你的 Cloudflare Worker 网址 (例如 `https://emby-manager.xxx.workers.dev`)。
-2. 点击右上角 **⚙️ GitHub 设置**：
+2. 输入你在 Worker 环境变量中设置的 `ADMIN_PASSWORD` 管理密码登录。
+3. 点击右上角 **⚙️ GitHub 设置**：
    - **GitHub 用户名 (Owner)**: `lisalee23042605`
    - **仓库名称 (Repo)**: `emby-autorenew-singbox`
    - **GitHub PAT Token**: 粘贴刚刚生成的 `ghp_xxxx` Token
    - 点击 **保存配置**。
-3. 点击右上角 **➕ 添加账号**：
+4. 点击右上角 **➕ 添加账号**：
    - 填写你的 Emby 服务器地址、用户名、密码。
    - 模拟设备名默认选 `Lisa's iPhone`。
    - 点击 **保存**。
-4. 点击右上角的 **🚀 立即触发保号** 进行联调测试：
+5. 点击右上角的 **🚀 立即触发保号** 进行联调测试：
    - 页面会提示 `Successfully dispatched GitHub Action`。
    - 去你的 GitHub 仓库 -> **Actions** 标签页查看，即可看到最新的保号任务已完美运行！
 
@@ -80,4 +91,16 @@ Q: **以后添加或删除 Emby 账号还需要修改 GitHub 吗？**
 A: 不需要！以后所有账号的增删改查都在 Cloudflare Worker 网页后台完成，Cloudflare 每天会自动把最新生效的账号列表传给 GitHub Actions 执行保号。
 
 Q: **保号日志在哪看？**
-A: 在 GitHub 仓库的 **Actions** 页面点击最新一次由 `repository_dispatch` 触发的运行，点开 `Run Emby Keep-Alive` 步骤即可看到详细日志，日志中设备名均显示为 `Lisa's iPhone`。
+A: 在 GitHub 仓库的 **Actions** 页面点击最新一次由 `repository_dispatch` 触发的运行，点开 `Run Emby Keep-Alive` 步骤即可看到详细日志，日志中设备名均显示为 `Lisa's iPhone`。同时你的 Telegram 也会收到保号结果通知。
+
+Q: **管理后台密码怎么修改？**
+A: 在 Cloudflare Dashboard 中进入你的 Worker → **Settings** → **Variables** → 修改 `ADMIN_PASSWORD` 的值即可。密码存储在 Cloudflare 侧，不会泄露到 GitHub。
+
+Q: **忘记密码了怎么办？**
+A: 直接在 Cloudflare Dashboard 的 Worker 环境变量中重新设置 `ADMIN_PASSWORD` 即可。
+
+Q: **Telegram 通知没收到？**
+A: 检查 GitHub Secrets 中 `TELEGRAM_BOT_TOKEN` 和 `TELEGRAM_CHAT_ID` 是否正确配置。确保 Bot 已经给你发过消息（需要先在 TG 中对 Bot 发送 `/start`）。
+
+Q: **GitHub Secrets 现在需要保留哪些？**
+A: 只需保留 `TELEGRAM_BOT_TOKEN` 和 `TELEGRAM_CHAT_ID`，其他 Emby 相关的 Secrets 全部可以删除。
