@@ -22,6 +22,67 @@ USER_AGENTS = [
     "Mozilla/5.0 (iPad; CPU OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Emby/4.8.8.0"
 ]
 
+
+def send_telegram_notification(success_list: List[str], fail_list: List[str], skip_list: List[str]):
+    """
+    Send keep-alive results summary via Telegram Bot.
+    Uses TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID from environment variables.
+    """
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+
+    if not bot_token or not chat_id:
+        print("[TG] TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set, skipping notification.")
+        return
+
+    total = len(success_list) + len(fail_list) + len(skip_list)
+    now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+
+    lines = []
+    lines.append("📺 *Emby 自动保号报告*")
+    lines.append(f"⏰ {now}")
+    lines.append(f"📊 共 {total} 个账号 | ✅ {len(success_list)} | ❌ {len(fail_list)} | ⏭ {len(skip_list)}")
+    lines.append("")
+
+    if success_list:
+        lines.append("✅ *保号成功:*")
+        for name in success_list:
+            lines.append(f"  • {name}")
+        lines.append("")
+
+    if fail_list:
+        lines.append("❌ *保号失败:*")
+        for name in fail_list:
+            lines.append(f"  • {name}")
+        lines.append("")
+
+    if skip_list:
+        lines.append("⏭ *已跳过 (已禁用):*")
+        for name in skip_list:
+            lines.append(f"  • {name}")
+        lines.append("")
+
+    if fail_list:
+        lines.append("⚠️ 请检查失败账号的服务器地址和密码是否正确")
+    else:
+        lines.append("🎉 全部保号成功！")
+
+    message = "\n".join(lines)
+
+    try:
+        tg_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        res = requests.post(tg_url, json={
+            "chat_id": chat_id,
+            "text": message,
+            "parse_mode": "Markdown"
+        }, timeout=15)
+        if res.status_code == 200:
+            print("[TG] Telegram notification sent successfully.")
+        else:
+            print(f"[TG] Failed to send notification, HTTP {res.status_code}: {res.text[:200]}")
+    except Exception as e:
+        print(f"[TG] Error sending notification: {e}")
+
 def get_accounts() -> List[Dict[str, Any]]:
     """
     Load accounts from environment variables.
@@ -175,21 +236,34 @@ def main():
         print("[Fatal] No active accounts to process. Exiting.")
         sys.exit(1)
 
-    success_count = 0
-    fail_count = 0
+    success_list = []
+    fail_list = []
+    skip_list = []
 
     for i, acc in enumerate(accounts):
+        name = acc.get("name", f"Account #{i+1}")
+        enabled = acc.get("enabled", True)
+
+        if not enabled:
+            skip_list.append(name)
+            print(f"\n[Skip] Skipping disabled account [{name}]")
+            continue
+
         ok = keep_alive_account(acc, i)
         if ok:
-            success_count += 1
+            success_list.append(name)
         else:
-            fail_count += 1
+            fail_list.append(name)
 
+    total = len(success_list) + len(fail_list) + len(skip_list)
     print(f"\n==========================================")
-    print(f" Summary: Total {len(accounts)} | Success: {success_count} | Failed: {fail_count}")
+    print(f" Summary: Total {total} | Success: {len(success_list)} | Failed: {len(fail_list)} | Skipped: {len(skip_list)}")
     print(f"==========================================")
 
-    if fail_count > 0 and success_count == 0:
+    # Send Telegram notification
+    send_telegram_notification(success_list, fail_list, skip_list)
+
+    if len(fail_list) > 0 and len(success_list) == 0:
         sys.exit(1)
 
 if __name__ == "__main__":
