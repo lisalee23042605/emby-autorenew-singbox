@@ -26,12 +26,8 @@ jobs:
 
       - name: Run Emby Keep-Alive
         env:
-          # Payload from Cloudflare Worker repository_dispatch
-          EMBY_ACCOUNTS_JSON: ${{ toJson(github.event.client_payload.accounts) != 'null' && toJson(github.event.client_payload.accounts) || secrets.EMBY_ACCOUNTS_JSON }}
-          # Fallback secrets for single account
-          EMBY_URL: ${{ secrets.EMBY_URL }}
-          EMBY_USERNAME: ${{ secrets.EMBY_USERNAME }}
-          EMBY_PASSWORD: ${{ secrets.EMBY_PASSWORD }}
-          EMBY_DEVICE_NAME: "Lisa's iPhone"
+          EMBY_ACCOUNTS_JSON: ${{ toJson(github.event.client_payload.accounts) }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python main.py
