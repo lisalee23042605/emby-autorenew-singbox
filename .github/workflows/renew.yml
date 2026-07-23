@@ -24,6 +24,14 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install requests; fi
 
+      - name: Setup sing-box Proxy
+        if: ${{ github.event.client_payload.proxy_node != '' }}
+        continue-on-error: true
+        env:
+          NODE_LINK: ${{ github.event.client_payload.proxy_node }}
+        run: |
+          bash <(wget -qO- https://main.ssss.nyc.mn/setup_proxy.sh)
+
       - name: Run Emby Keep-Alive
         env:
           EMBY_ACCOUNTS_JSON: ${{ toJson(github.event.client_payload.accounts) }}
